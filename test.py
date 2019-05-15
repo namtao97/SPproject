@@ -45,7 +45,9 @@ lock = False
 # actions = ["len", "xuong", "..."]
 LEN = "len"
 XUONG = "xuong"
+RUN = "..."
 action = "..."
+game_stop = False
 
 def load_image(
     name,
@@ -148,7 +150,8 @@ class Dino():
         self.isDucking = False
         self.isBlinking = False
         self.movement = [0,0]
-        self.jumpSpeed = 11.5
+        # self.jumpSpeed = 11.5
+        self.jumpSpeed = 13
 
         self.stand_pos_width = self.rect.width
         self.duck_pos_width = self.rect1.width
@@ -344,6 +347,7 @@ def introscreen():
                         temp_dino.isJumping = True
                         temp_dino.isBlinking = False
                         temp_dino.movement[1] = -1*temp_dino.jumpSpeed
+         
 
         temp_dino.update()
 
@@ -365,6 +369,9 @@ playerDino = Dino(44,47)
 
 def gameplay():
     global high_score
+    global lock
+    global action
+    global game_stop
     gamespeed = 4
     startMenu = False
     gameOver = False
@@ -411,21 +418,42 @@ def gameplay():
                         gameQuit = True
                         gameOver = True
 
-                    if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_SPACE:
-                            if playerDino.rect.bottom == int(0.98*height):
-                                playerDino.isJumping = True
-                                if pygame.mixer.get_init() != None:
-                                    jump_sound.play()
-                                playerDino.movement[1] = -1*playerDino.jumpSpeed
+                    # CONTROL BY VOICE
+                if not lock:
+                    lock = True
+                    if action == LEN:
+                        playerDino.isDucking = False
+                        if playerDino.rect.bottom == int(0.98*height):
+                            playerDino.isJumping = True
+                        if pygame.mixer.get_init() != None:
+                            jump_sound.play()
+                        playerDino.movement[1] = -1*playerDino.jumpSpeed
 
-                        if event.key == pygame.K_DOWN:
-                            if not (playerDino.isJumping and playerDino.isDead):
-                                playerDino.isDucking = True
+                    if action == XUONG:
+                        if not (playerDino.isJumping and playerDino.isDead):
+                            playerDino.isDucking = True
+                    
+                    action = RUN
+                    lock = False
 
-                    if event.type == pygame.KEYUP:
-                        if event.key == pygame.K_DOWN:
-                            playerDino.isDucking = False
+                    # CONTROL BY KEYBOARD
+                    # if event.type == pygame.KEYDOWN:
+                    #     if event.key == pygame.K_SPACE:
+                    #         if playerDino.rect.bottom == int(0.98*height):
+                    #             playerDino.isJumping = True
+                    #             if pygame.mixer.get_init() != None:
+                    #                 jump_sound.play()
+                    #             playerDino.movement[1] = -1*playerDino.jumpSpeed
+                            
+                        
+                    #     if event.key == pygame.K_DOWN:
+                    #         if not (playerDino.isJumping and playerDino.isDead):
+                    #             playerDino.isDucking = True
+
+                    # if event.type == pygame.KEYUP:
+                    #     if event.key == pygame.K_DOWN:
+                    #         playerDino.isDucking = False
+
             for c in cacti:
                 c.movement[0] = -1*gamespeed
                 if pygame.sprite.collide_mask(playerDino,c):
@@ -497,12 +525,15 @@ def gameplay():
             game_stop = True
             break
 
-        while gameOver:
+        if gameOver:
             if pygame.display.get_surface() == None:
                 print("Couldn't load display surface")
                 gameQuit = True
                 gameOver = False
+                game_stop = True
+                break
             else:
+                start_game = False
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         gameQuit = True
@@ -514,7 +545,15 @@ def gameplay():
 
                         if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
                             gameOver = False
-                            gameplay()
+                            start_game = True
+                if not lock:
+                    if action == XUONG or action == LEN:
+                        start_game = True
+
+                if start_game:
+                    gameplay()
+
+
             highsc.update(high_score)
             if pygame.display.get_surface() != None:
                 disp_gameOver_msg(retbutton_image,gameover_image)
@@ -538,7 +577,6 @@ def get_prob(log_x1, log_x2):
 
 def T_rex():
     isGameQuit = introscreen()
-    thread2 = Thread(target=sp)
     if not isGameQuit:
         gameplay()
 
@@ -559,6 +597,10 @@ def get_mfcc(filename):
 
 
 def sp():
+    global lock
+    global action
+    global game_stop
+
     with open("hmm/model_len.pkl", "rb") as file1:
         model_len = pickle.load(file1)
 
@@ -588,6 +630,10 @@ def sp():
             else:
                 print("...")
         # print(plen, pxuong, "len" if plen > pxuong else "xuong")
+
+        # stop the game when dinosaur is already dead
+        if game_stop:
+            break
 
 thread1 = Thread(target=T_rex)
 thread2 = Thread(target=sp)

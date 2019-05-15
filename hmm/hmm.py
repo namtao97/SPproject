@@ -8,8 +8,8 @@ from math import exp
 import pickle
 
 def record_sound(filename, duration=1, fs=44100, play=False):
-    # sd.play( np.sin( 2*np.pi*940*np.arange(fs)/fs )  , samplerate=fs, blocking=True)
-    # sd.play( np.zeros( int(fs*0.2) ), samplerate=fs, blocking=True)
+    sd.play( np.sin( 2*np.pi*940*np.arange(fs)/fs )  , samplerate=fs, blocking=True)
+    sd.play( np.zeros( int(fs*0.2) ), samplerate=fs, blocking=True)
     data = sd.rec(frames=duration*fs, samplerate=fs, channels=1, blocking=True)
     if play:
         sd.play(data, samplerate=fs, blocking=True)
@@ -50,7 +50,7 @@ def get_prob(log_x1, log_x2):
         p = get_prob(log_x2, log_x1)
         return p[1], p[0]
 
-log_plen_threshole = -23000
+log_xuong_threshole = -23000
 
 while True:
     record_sound('nam.wav')
@@ -60,10 +60,10 @@ while True:
 
     plen, pxuong = get_prob(log_plen, log_pxuong)
     if plen > pxuong:
-        if log_plen < log_plen_threshole:
             print("len")
+    else:
+        if log_pxuong > log_xuong_threshole:
+            print("xuong")
         else:
             print("...")
-    else:
-        print("xuong")
     # print(plen, pxuong, "len" if plen > pxuong else "xuong")
