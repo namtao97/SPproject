@@ -16,10 +16,13 @@ from math import exp
 import pickle
 from threading import Thread
 
+from recorder import SpeechRecognition
+from detector import Detector
+
 pygame.init()
 
 # scr_size = (width, height) = (600, 150)
-scr_size = (width, height) = (600, 400)
+scr_size = (width, height) = (600, 300)
 game_size = (g_width, g_height) = (600, 150)
 max_height_ptera = 100 + g_height
 FPS = 60
@@ -31,7 +34,8 @@ background_col = (235,235,235)
 
 high_score = 0
 
-log_len_threshole = -24000
+log_len_threshole = -23000
+log_xuong_threshole = -24000
 
 screen = pygame.display.set_mode(scr_size)
 clock = pygame.time.Clock()
@@ -46,8 +50,16 @@ lock = False
 LEN = "len"
 XUONG = "xuong"
 RUN = "..."
-action = "..."
+action = RUN
 game_stop = False
+
+detector = Detector(
+    model_len_path='hmm/model_len.pkl',
+    model_xuong_path='hmm/model_xuong.pkl'
+)
+
+speech_recognition = SpeechRecognition('recording.wav', detector)
+
 
 def load_image(
     name,
@@ -347,15 +359,8 @@ def introscreen():
                         temp_dino.isJumping = True
                         temp_dino.isBlinking = False
                         temp_dino.movement[1] = -1*temp_dino.jumpSpeed
-
-            # start game by jump
-            # if not lock:
-            #     if action == LEN or action == XUONG:
-            #         temp_dino.isJumping = True
-            #         temp_dino.isBlinking = False
-            #         temp_dino.movement[1] = -1*temp_dino.jumpSpeed
-                    
          
+
         temp_dino.update()
 
         if pygame.display.get_surface() != None:
@@ -377,8 +382,9 @@ playerDino = Dino(44,47)
 def gameplay():
     global high_score
     global lock
-    global action
     global game_stop
+    global speech_recognition
+
     gamespeed = 4
     startMenu = False
     gameOver = False
@@ -425,9 +431,10 @@ def gameplay():
                         gameQuit = True
                         gameOver = True
 
-                # CONTROL BY VOICE
-                if not lock:
+                if not lock and speech_recognition.action_number() > 0:
                     lock = True
+                    action = speech_recognition.pop()
+
                     if action == LEN:
                         playerDino.isDucking = False
                         if playerDino.rect.bottom == int(0.98*height):
@@ -439,9 +446,26 @@ def gameplay():
                     if action == XUONG:
                         if not (playerDino.isJumping and playerDino.isDead):
                             playerDino.isDucking = True
-                    
-                    action = RUN
+
                     lock = False
+
+                # CONTROL BY VOICE
+                # if not lock:
+                #     lock = True
+                #     if action == LEN:
+                #         playerDino.isDucking = False
+                #         if playerDino.rect.bottom == int(0.98*height):
+                #             playerDino.isJumping = True
+                #         if pygame.mixer.get_init() != None:
+                #             jump_sound.play()
+                #         playerDino.movement[1] = -1*playerDino.jumpSpeed
+
+                #     if action == XUONG:
+                #         if not (playerDino.isJumping and playerDino.isDead):
+                #             playerDino.isDucking = True
+                    
+                #     action = RUN
+                #     lock = False
 
                     # CONTROL BY KEYBOARD
                     # if event.type == pygame.KEYDOWN:
@@ -553,10 +577,7 @@ def gameplay():
                         if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
                             gameOver = False
                             start_game = True
-                if not lock:
-                    if action == XUONG or action == LEN:
-                        start_game = True
-
+                            
                 if start_game:
                     gameplay()
 
@@ -571,15 +592,8 @@ def gameplay():
             clock.tick(FPS)
 
     pygame.quit()
+    speech_recognition.stop()
     quit()
-
-def get_prob(log_x1, log_x2):
-    if log_x1 < log_x2:
-        exp_x1_x2 = exp(log_x1-log_x2)
-        return exp_x1_x2 / (1+exp_x1_x2), 1 / (1+exp_x1_x2)
-    else:
-        p = get_prob(log_x2, log_x1)
-        return p[1], p[0]
 
 
 def T_rex():
@@ -587,62 +601,9 @@ def T_rex():
     if not isGameQuit:
         gameplay()
 
-# speech processing functions
-def record_sound(filename, duration=0.4, fs=44100, play=False):
-    # sd.play( np.sin( 2*np.pi*940*np.arange(fs)/fs )  , samplerate=fs, blocking=True)
-    # sd.play( np.zeros( int(fs*0.2) ), samplerate=fs, blocking=True)
-    data = sd.rec(frames=int(duration*fs), samplerate=fs, channels=1, blocking=True)
-    if play:
-        sd.play(data, samplerate=fs, blocking=True)
-    sf.write(filename, data=data, samplerate=fs)
-
-
-def get_mfcc(filename):
-    data, fs = librosa.load(filename, sr=None)
-    mfcc = librosa.feature.mfcc(data, sr=fs, n_fft=1024, hop_length=128)
-    return mfcc.T
-
-
-def sp():
-    global lock
-    global action
-    global game_stop
-
-    with open("models/fast_hmm/model_len.pkl", "rb") as file1:
-        model_len = pickle.load(file1)
-
-    with open("models/fast_hmm/model_xuong.pkl", "rb") as file2:
-        model_xuong = pickle.load(file2)
-
-    with open("models/fast_hmm/model_run.pkl", "rb") as file3:
-        model_run = pickle.load(file3)
-
-    while True:
-        record_sound('nam.wav')
-        mfcc = get_mfcc('nam.wav')
-        log_plen, log_pxuong, log_prun = model_len.score(mfcc), model_xuong.score(mfcc), model_run.score(mfcc)
-        print(log_plen, log_pxuong, log_prun)
-
-        class_predict = max([log_plen, log_pxuong, log_prun])
-        if not lock:
-            lock = True
-
-            if log_plen == class_predict:
-                action = LEN
-            elif log_pxuong == class_predict:
-                action = XUONG
-            else:
-                action = RUN
-
-            print(action)
-            lock = False
-
-        # stop the game when dinosaur is already dead
-        if game_stop:
-            break
 
 thread1 = Thread(target=T_rex)
-thread2 = Thread(target=sp)
+thread2 = Thread(target=speech_recognition.start)
 
 thread1.start()
 thread2.start()
